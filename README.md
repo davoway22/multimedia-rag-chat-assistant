@@ -122,11 +122,11 @@ aws cloudformation create-stack \
 3. Replace placeholder values with chatbot.yaml CloudFormation stack outputs
 4. Build and Deploy Frontend
       `
-      #### Install dependencies
-      npm install
+      **Install dependencies**
+      - npm install
 
-      #### Build the application
-      npm run build
+      **Build the application**
+      - npm run build
       `
 5. Upload the contents of chatbot-react/build to <ReactAppHostBucket> Amazon S3 bucket
 
