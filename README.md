@@ -17,7 +17,7 @@ Amazon Bedrock Data Automation:
   * Manages all content parsing
   * Converts documents, images, video, and audio to text
   
-# This implementation is suitable for:
+### This implementation is suitable for:
   * Processing text from common text formats, visually rich documents and images.
   * Processing speech to text from audio or video files
   * Processing video files without audio for complete summary and events
