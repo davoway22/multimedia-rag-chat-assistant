@@ -108,7 +108,7 @@ aws cloudformation create-stack \
 ## Frontend Configuration
 1. Navigate to the chatbot-react folder
 2. Create .env file with the following structure:
-      `
+```
       REACT_APP_LAMBDA_FUNCTION_NAME=<ReactAppLambdaFunctionName>
       REACT_APP_S3_SOURCE=<ReactAppS3Source>
       REACT_APP_AWS_REGION=<chatbot.yaml_deployment_region>
@@ -118,7 +118,7 @@ aws cloudformation create-stack \
       REACT_APP_CLOUDFRONT_DOMAIN_NAME=<ReactAppCloudfrontDomainName>
       REACT_APP_DOCUMENTS_KB_ID=<ReactAppDocumentsKbId>
       REACT_APP_DOCUMENTS_DS_ID=<ReactAppDocumentsDsId>
-      `
+```
 3. Replace placeholder values with chatbot.yaml CloudFormation stack outputs
 4. Build and Deploy Frontend
       * Install dependencies
