@@ -138,7 +138,7 @@ aws cloudformation create-stack \
 1. Verify the CloudFront distribution is deployed and active
 
 ### Application Access
-1. Access the application using: https://<ReactAppCloudFrontDomainName>.cloudfront.net/
+1. Access the application using: https:// <ReactAppCloudFrontDomainName> .cloudfront.net/
 2. Signup or Log in with your credentials
 3. Use the left navigation pane to:
    a. Upload files
