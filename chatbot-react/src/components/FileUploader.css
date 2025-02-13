@@ -1,0 +1,65 @@
+.upload-status-list {
+  margin-top: 1rem;
+  border: 1px solid #eaeded;
+  border-radius: 4px;
+  padding: 1rem;
+}
+
+.upload-status-item {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 4px;
+}
+
+.upload-status-item:last-child {
+  margin-bottom: 0;
+}
+
+.upload-status-item.queued {
+  background-color: #f2f3f3;
+}
+
+.upload-status-item.processing {
+  background-color: #f1f8ff;
+}
+
+.upload-status-item.success {
+  background-color: #f0f8f1;
+}
+
+.upload-status-item.error {
+  background-color: #fdf3f3;
+}
+
+.progress-bar-container {
+  margin-top: 0.5rem;
+  background-color: #eaeded;
+  border-radius: 2px;
+  height: 4px;
+  position: relative;
+}
+
+.progress-bar {
+  background-color: #0073bb;
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  position: absolute;
+  right: 0;
+  top: -1.5rem;
+  font-size: 0.8rem;
+  color: #5f6b7a;
+}
+
+.file-name {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.status-message {
+  font-size: 0.9rem;
+  color: #5f6b7a;
+}
