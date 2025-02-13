@@ -4,10 +4,12 @@
 In the era of information overload, extracting meaningful insights from diverse data sources has become increasingly challenging. This becomes particularly difficult when businesses have terabytes of video and audio files, along with text based data and need to quickly access specific sections or topics, summarize content, or answer targeted questions using information sourced from these diverse files without having to switch context or solutions. 
 This unified GenAI solution transforms how users interact with their data. This solution seamlessly integrates with various file formats including video, audio PDFs and text documents, providing a unified interface for knowledge extraction. Users can ask questions about their data, and the solution delivers precise answers, complete with source attribution. Responses are linked to their origin, which could include videos that load at the exact timestamp, for faster and efficient referance, PDF files or documents. 
 
-This sample solution will demonstrate how to leverage AWS's AI services to: 
+This sample solution will demonstrate how to leverage AWS AI services to: 
 * Process and index multi-format data at scale, including large video, audio and documents 
 * Rapidly summarize extensive content from various file types 
 * Deliver context-rich responses Provide an unified, intuitive user experience for seamless data exploration
+
+https://github.com/user-attachments/assets/0c7032f7-73df-4be1-ac2c-b1240ee0a2d0
 
 ## Deployment Options
 
@@ -89,8 +91,10 @@ aws cloudformation create-stack \
 
 1. Using the console or CLI, deploy chatbot.yaml template first
 2. From the **Outputs** section of the deployed stack, copy **ReactAppUserPoolId**'s value
+![deploy-chatbot](https://github.com/user-attachments/assets/7aa48c93-f623-47c9-9ddf-7a870da2c359)
 3. Deploy lambda-edge.yaml template using Cognito User Pool ID obtained from previous step
 4. From the **Outputs** section of the lambda-edge.yaml stack, copy **EdgeFunctionVersionARN**'s value
+![deploy-lambdaedge](https://github.com/user-attachments/assets/ead546c4-9930-433d-bb50-e02e57d8fe41)
 
 ## Amazon CloudFront Configuration
 
@@ -104,6 +108,7 @@ aws cloudformation create-stack \
 8. Provide the EdgeFunctionVersionARN obtained from the previous step
 9. Scroll to the bottom and click "Save changes"
 10. Wait for the distribution to deploy the changes (Status will change from "In Progress" to "Deployed")
+![update-cfront](https://github.com/user-attachments/assets/51d55b42-f58c-4862-bfb8-46be3b2340a7)
 
 ## Frontend Configuration
 1. Navigate to the chatbot-react folder
@@ -126,7 +131,7 @@ aws cloudformation create-stack \
       * Build the application
       ```npm run build```
 5. Upload the contents of chatbot-react/build to <ReactAppHostBucket> Amazon S3 bucket
-
+![deploy-app](https://github.com/user-attachments/assets/112b08be-af4b-4619-887d-a98384b416aa)
 
 ## Usage
 ### Initial Setup
