@@ -154,7 +154,7 @@ aws cloudformation create-stack \
 
 ### Test different LLMs or Inference Configuration
 1. Use the left navigation pane to select 'Inference Configuration' from the dropdown
-2. Provide a Bedrock supported model's inference profile ID
+2. Provide a Bedrock supported model's inference profile ID (This solution works best with Anthropic Claude 3 Haiku. Other LLMs might require prompt tuning in <ReactAppLambdaFunctionName>)
 3. Change Temperature and TopP
 4. Ask a question and test infered answer
 
