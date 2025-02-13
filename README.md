@@ -9,7 +9,7 @@ This sample solution will demonstrate how to leverage AWS AI services to:
 * Rapidly summarize extensive content from various file types 
 * Deliver context-rich responses Provide an unified, intuitive user experience for seamless data exploration
 
-https://github.com/user-attachments/assets/0c7032f7-73df-4be1-ac2c-b1240ee0a2d0
+https://github.com/user-attachments/assets/eabccee8-f780-43e6-ac31-064dacb48a09
 
 ## Deployment Options
 
@@ -89,10 +89,10 @@ aws cloudformation create-stack \
     --capabilities CAPABILITY_IAM \
     --parameters ParameterKey=<key>,ParameterValue=<value>
 
-1. Using the console or CLI, deploy chatbot.yaml template first
+1. Using the console or CLI, deploy chatbot.yaml template first (only us-west-2 supported currently)
 2. From the **Outputs** section of the deployed stack, copy **ReactAppUserPoolId**'s value
 ![deploy-chatbot](https://github.com/user-attachments/assets/7aa48c93-f623-47c9-9ddf-7a870da2c359)
-3. Deploy lambda-edge.yaml template using Cognito User Pool ID obtained from previous step
+3. Deploy lambda-edge.yaml template (in us-east-1 only) using the Cognito User Pool ID obtained from previous step
 4. From the **Outputs** section of the lambda-edge.yaml stack, copy **EdgeFunctionVersionARN**'s value
 ![deploy-lambdaedge](https://github.com/user-attachments/assets/ead546c4-9930-433d-bb50-e02e57d8fe41)
 
