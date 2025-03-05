@@ -89,7 +89,7 @@ aws cloudformation create-stack \
     --capabilities CAPABILITY_IAM \
     --parameters ParameterKey=<key>,ParameterValue=<value>
 
-1. Using the console or CLI, deploy chatbot.yaml template first (only us-west-2 supported currently)
+1. Using the console or CLI, deploy chatbot.yaml template first
 2. From the **Outputs** section of the deployed stack, copy **ReactAppUserPoolId**'s value
 ![deploy-chatbot](https://github.com/user-attachments/assets/7aa48c93-f623-47c9-9ddf-7a870da2c359)
 3. Deploy lambda-edge.yaml template (in us-east-1 only) using the Cognito User Pool ID obtained from previous step
@@ -177,10 +177,6 @@ aws cloudformation create-stack \
 - Maximum file size limitations apply based on AWS service limits
 - Single document cannot exceed 20 pages
 - Files have to be manually deleted from <ReactAppS3Source> and <OrganizedBucket> buckets and Amazon Bedrock Knowledge Basess have to be manually synced to reflect these changes.
-
-## Region Support
-Bedrock Data Automation currently available only in:
-- us-west-2
 
 ## This sample solution is intended to be used with public, non-sensitive data only
 This is a demonstration/sample solution and is not intended for production use. Please note:
