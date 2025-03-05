@@ -389,13 +389,16 @@ Resources:
     Type: AWS::Events::Rule
     Condition: IsBedrockDataAutomation
     Properties:
-      Name: !Sub '${AWS::StackName}-bda-async-rule'
+      Name: !Sub '${AWS::StackName}-bda-async-rule-${ResourceSuffix}'
       Description: 'Rule for BDA async API calls'
       EventPattern:
         source:
-          - aws.bedrock-data-insights
+          - aws.bedrock
+          - aws.bedrock-test
         detail-type:
-          - "Insights Extraction Job Completed"
+          - "Bedrock Data Automation Job Succeeded"
+          - "Bedrock Data Automation Job Failed With Client Error"
+          - "Bedrock Data Automation Job Failed With Service Error"
       State: ENABLED
       Targets:
         - Arn: !GetAtt BDAProcessingFunction.Arn
@@ -608,10 +611,10 @@ Resources:
                       all_timestamps = []
                       speakers = set()
 
-                      for scene in json_data.get('scenes', []):
+                      for chapter in json_data.get('chapters', []):
                           # Process frames (visual content)
-                          if 'frames' in scene:
-                              for frame in scene['frames']:
+                          if 'frames' in chapter:
+                              for frame in chapter['frames']:
                                   if 'text_lines' in frame:
                                       timestamp = frame.get('timestamp_millis', 0) // 1000
                                       all_timestamps.append(timestamp)
@@ -623,7 +626,7 @@ Resources:
                                               })
 
                           # Process audio segments
-                          for segment in scene.get('audio_segments', []):
+                          for segment in chapter.get('audio_segments', []):
                               # Add debug logging
                               logger.debug(f"Processing audio segment: {segment}")
                               
@@ -652,8 +655,8 @@ Resources:
 
                       # Get categories
                       categories = set()
-                      for scene in json_data.get('scenes', []):
-                          for category in scene.get('iab_categories', []):
+                      for chapter in json_data.get('chapters', []):
+                          for category in chapter.get('iab_categories', []):
                               categories.add(category['category'])
 
                       # Get time range including both visual and audio timestamps
@@ -921,61 +924,62 @@ Resources:
 
           def lambda_handler(event, context):
               logger.info(f"Received BDA Invocation response: {event}")
-              try:
-                  # Extract S3 details from the event
-                  detail = event['detail']
-                  output_bucket = os.environ['ORGANIZED_BUCKET']
-                  base_path = detail['output_s3_location']['name']
-                  
-                  # Get original filename with underscore and extension without dot
-                  original_filename = f"{os.path.splitext(detail['input_s3_object']['name'])[0]}_{os.path.splitext(detail['input_s3_object']['name'])[1][1:]}"
-                  # Construct the full S3 path for result.json
-                  result_key = f"{base_path}/standard_output/0/result.json"
-                  
-                  # Create S3 client
-                  s3_client = boto3.client('s3')
-                  
-                  # Download the result.json file
-                  response = s3_client.get_object(
-                      Bucket=output_bucket,
-                      Key=result_key
-                  )
-                  logger.info(f"Downloaded BDA invocation result")
-                  # Read the content of the file
-                  result_content = json.loads(response['Body'].read().decode('utf-8'))
+              if event['detail-type'] == 'Bedrock Data Automation Job Succeeded':
+                  try:
+                      # Extract S3 details from the event
+                      detail = event['detail']
+                      output_bucket = os.environ['ORGANIZED_BUCKET']
+                      base_path = detail['output_s3_location']['name']
+                      
+                      # Get original filename with underscore and extension without dot
+                      original_filename = f"{os.path.splitext(detail['input_s3_object']['name'])[0]}_{os.path.splitext(detail['input_s3_object']['name'])[1][1:]}"
+                      # Construct the full S3 path for result.json
+                      result_key = f"{base_path}/standard_output/0/result.json"
+                      
+                      # Create S3 client
+                      s3_client = boto3.client('s3')
+                      
+                      # Download the result.json file
+                      response = s3_client.get_object(
+                          Bucket=output_bucket,
+                          Key=result_key
+                      )
+                      logger.info(f"Downloaded BDA invocation result")
+                      # Read the content of the file
+                      result_content = json.loads(response['Body'].read().decode('utf-8'))
 
-                  processor = ContentProcessor()
-                  processed_result = processor.process_content(result_content)
+                      processor = ContentProcessor()
+                      processed_result = processor.process_content(result_content)
 
-                  # Save processed result to Documents folder
-                  processed_key = f"Documents/{original_filename}.txt"
-                  
-                  s3_client.put_object(
-                      Bucket=output_bucket,
-                      Key=processed_key,
-                      Body=processed_result.encode('utf-8'),
-                      ContentType='text/plain'
-                  )
-                  
-                  logger.info(f"Saved processed result to s3://{output_bucket}/{processed_key}")
-                  
-                  return {
-                      'statusCode': 200,
-                      'body': json.dumps({
-                          'message': 'Successfully processed result.json',
-                          'result': result_content
-                      })
-                  }
-                  
-              except Exception as e:
-                  print(f"Error processing result.json: {str(e)}")
-                  return {
-                      'statusCode': 500,
-                      'body': json.dumps({
-                          'message': 'Error processing result.json',
-                          'error': str(e)
-                      })
-                  }
+                      # Save processed result to Documents folder
+                      processed_key = f"Documents/{original_filename}.txt"
+                      
+                      s3_client.put_object(
+                          Bucket=output_bucket,
+                          Key=processed_key,
+                          Body=processed_result.encode('utf-8'),
+                          ContentType='text/plain'
+                      )
+                      
+                      logger.info(f"Saved processed result to s3://{output_bucket}/{processed_key}")
+                      
+                      return {
+                          'statusCode': 200,
+                          'body': json.dumps({
+                              'message': 'Successfully processed result.json',
+                              'result': result_content
+                          })
+                      }
+                      
+                  except Exception as e:
+                      print(f"Error processing result.json: {str(e)}")
+                      return {
+                          'statusCode': 500,
+                          'body': json.dumps({
+                              'message': 'Error processing result.json',
+                              'error': str(e)
+                          })
+                      }
       Runtime: python3.12
       Timeout: 900
       MemorySize: 256
@@ -1064,6 +1068,8 @@ Resources:
 
           def lambda_handler(event, context):
               print('Received event:', json.dumps(event, indent=2))
+              account_id = context.invoked_function_arn.split(':')[4]
+              region = os.environ['AWS_REGION']
               source_bucket = event['detail']['bucket']['name']
               key = event['detail']['object']['key']
               target_bucket = os.environ['ORGANIZED_BUCKET']
@@ -1085,14 +1091,15 @@ Resources:
                               's3Uri': f's3://{target_bucket}/bda-output/{file_name_with_extension}/'
                           },
                           dataAutomationConfiguration={
-                              'dataAutomationArn': os.environ['BDA_AUTOMATION_ARN'],
+                              'dataAutomationProjectArn': os.environ['BDA_AUTOMATION_ARN'],
                               'stage': 'LIVE'
                           },
                           notificationConfiguration={
                               'eventBridgeConfiguration': {
                                   'eventBridgeEnabled': True
                               }
-                          }
+                          },
+                          dataAutomationProfileArn = f'arn:aws:bedrock:{region}:{account_id}:data-automation-profile/us.data-automation-v1'
                       )
                       
                       print(f"BDA processing started: {response}")
@@ -1205,7 +1212,9 @@ Resources:
                 - Effect: Allow
                   Action:
                     - bedrock:InvokeDataAutomationAsync
-                  Resource: !GetAtt BDAProjectCreator.ProjectArn
+                  Resource: 
+                    - !GetAtt BDAProjectCreator.ProjectArn
+                    - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:data-automation-profile/us.data-automation-v1'
           - !Ref AWS::NoValue
 
   InitialProcessingPermission:
