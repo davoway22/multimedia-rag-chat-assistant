@@ -130,7 +130,7 @@ aws cloudformation create-stack \
       ```npm install```
       * Build the application
       ```npm run build```
-5. Upload the contents of chatbot-react/build to <ReactAppHostBucket> Amazon S3 bucket
+5. Upload the contents of chatbot-react/build to ```< ReactAppHostBucket>``` Amazon S3 bucket
 ![deploy-app](https://github.com/user-attachments/assets/112b08be-af4b-4619-887d-a98384b416aa)
 
 ## Usage
