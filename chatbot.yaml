@@ -315,7 +315,7 @@ Resources:
                                   "state": "ENABLED",
                                   "types": [
                                       "AUDIO_SUMMARY",
-                                      "CHAPTER_SUMMARY"
+                                      "TOPIC_SUMMARY"
                                   ]
                               }
                           }
