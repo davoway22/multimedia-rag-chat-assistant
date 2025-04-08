@@ -296,7 +296,7 @@ Resources:
                                   "state": "ENABLED",
                                   "types": [
                                       "VIDEO_SUMMARY",
-                                      "SCENE_SUMMARY",
+                                      "CHAPTER_SUMMARY",
                                       "IAB"
                                   ]
                               }
