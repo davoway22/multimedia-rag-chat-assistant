@@ -6,7 +6,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Auth } from 'aws-amplify';
 import './FileUploader.css';
 
-const BUCKET_NAME = process.env.REACT_APP_S3_SOURCE;
+const BUCKET_NAME = process.env.REACT_APP_S3_ORGANIZEDBUCKET;
 
 const FileUploader = () => {
   const [value, setValue] = React.useState([]);
