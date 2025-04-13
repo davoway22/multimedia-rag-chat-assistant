@@ -16,6 +16,11 @@ import { useGuardrail, useInferenceConfig } from '../context/AppContext';
 // Set of valid media extensions
 const MEDIA_EXTENSIONS = new Set(['mp3', 'mp4', 'wav', 'flac', 'ogg', 'amr', 'webm', 'mov']);
 
+// Safe string startsWith implementation
+const safeStartsWith = (str, prefix) => {
+  return str && typeof str === 'string' ? str.startsWith(prefix) : false;
+};
+
 // Utility function to convert time
 const convertTime = (stime) => {
   if (!stime) return '';
@@ -48,11 +53,15 @@ const convertTime = (stime) => {
 const parseMetadata = (metadataLines) => {
   const parsed = {};
   
+  if (!metadataLines || !Array.isArray(metadataLines)) return parsed;
+
   metadataLines.forEach(line => {
-    const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('<location>')) {
+    const trimmedLine = line ? line.trim() : '';
+    if (safeStartsWith(trimmedLine, '<location>')) {
       const location = trimmedLine.replace(/<\/?location>/g, '');
-      parsed[location] = []; 
+      if (location) {
+        parsed[location] = []; 
+      }
     }
   });
 
@@ -60,17 +69,18 @@ const parseMetadata = (metadataLines) => {
 };
 
 const parseTimestamps = (answer, parsedMetadata) => {
+  if (!answer || typeof answer !== 'string') return answer || '';
+  
   return answer.replace(/\[(\d+)\s+([^\]]+)\]/g, (match, seconds, filename) => {
-    
-    if (Object.keys(parsedMetadata).includes(filename)) {
-      const actual_extension = filename.split('_').pop().split('.')[0];
+    if (filename && parsedMetadata && Object.keys(parsedMetadata).includes(filename)) {
+      const parts = filename.split('_');
+      const extParts = parts.length > 0 ? parts[parts.length - 1].split('.') : [];
+      const actual_extension = extParts.length > 0 ? extParts[0] : '';
       
-      if (MEDIA_EXTENSIONS.has(actual_extension)) {
+      if (actual_extension && MEDIA_EXTENSIONS.has(actual_extension)) {
         const formattedTime = convertTime(seconds);
         const result = `|||TIMESTAMP:${seconds}:${formattedTime}:${filename}|||`;
         return result;
-      } else {
-        return '';
       }
     }
     return match;
@@ -78,11 +88,17 @@ const parseTimestamps = (answer, parsedMetadata) => {
 };
 
 const getFileUrl = (filename) => {
-  if (filename && filename.includes('.txt')) {
-    const actual_extension = filename.split('_').pop().split('.')[0];
-    // Remove both .txt and _extension from the filename
-    const videoName = filename.replace('.txt', '').replace(`_${actual_extension}`, '');
-    return `https://${getCloudFrontDomain()}.cloudfront.net/${videoName}.${actual_extension}`;
+  if (!filename || typeof filename !== 'string') return '';
+  
+  if (filename.includes('.txt')) {
+    const parts = filename.split('_');
+    const extParts = parts.length > 0 ? parts[parts.length - 1].split('.') : [];
+    const actual_extension = extParts.length > 0 ? extParts[0] : '';
+    
+    if (actual_extension) {
+      const videoName = filename.replace('.txt', '').replace(`_${actual_extension}`, '');
+      return `https://${getCloudFrontDomain()}.cloudfront.net/${videoName}.${actual_extension}`;
+    }
   }
   return '';
 };
@@ -100,7 +116,6 @@ const Chat = () => {
   const isSpeechSupported = 'speechSynthesis' in window;  
   const { guardrailValue, guardrailVersion } = useGuardrail();
   const { temperature, topP } = useInferenceConfig();
-
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -145,6 +160,7 @@ const Chat = () => {
       try {
         recognition.start();
       } catch (error) {
+        console.error('Speech recognition error:', error);
       }
     } else {
       alert('Speech recognition is not supported in this browser.');
@@ -152,6 +168,8 @@ const Chat = () => {
   };
 
   const speak = (text) => {
+    if (!text || typeof text !== 'string') return;
+    
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
   
@@ -181,7 +199,7 @@ const Chat = () => {
   };
   
   const handleSubmit = async () => {
-    if (!input.trim()) return;
+    if (!input || !input.trim()) return;
 
     const userMessage = input.trim();
     setInput(''); 
@@ -218,7 +236,6 @@ const Chat = () => {
         topP: topP
       };
       
-
       const command = new InvokeCommand({
         FunctionName: process.env.REACT_APP_LAMBDA_FUNCTION_NAME,
         Payload: JSON.stringify(payload)
@@ -236,28 +253,23 @@ const Chat = () => {
         throw new Error(`API error: ${result.body}`);
       }
 
-      const content = result.body.answer.content[0].text;
+      const content = result.body.answer?.content?.[0]?.text || '';
 
       if (content.includes('</answer>')) {
-        // log content to browser
-        console.log("Content: ",content);
         const [answerText, metadataText] = content.split('<answer>')[1].split('</answer>');
 
         // Check for location tags within answer
         let processedAnswer = answerText;
         let locationTags = '';
         if (answerText.includes('<location>')) {
-          // Extract location information
           const locationMatch = answerText.match(/<location>(.*?)<\/location>/s);
           if (locationMatch) {
               locationTags = `<location>${locationMatch[1]}</location>`;
-              // Remove location tags from the answer
               processedAnswer = answerText.replace(/<location>.*?<\/location>/s, '').trim();
           }
         }
-        // Combine metadata with location tags
+        
         const combinedMetadata = locationTags ? `${locationTags}\n${metadataText}` : metadataText;
-  
         const metadata = parseMetadata(combinedMetadata.split('\n'));
         setParsedMetadata(metadata);
   
@@ -269,10 +281,8 @@ const Chat = () => {
           metadata: metadata
         }]);
       } else {
-        // Handle content without answer tags but possibly with location tags
         let processedContent = content;
         if (content.includes('<location>')) {
-          // Remove location tags and their content completely
           processedContent = content.replace(/<location>.*?<\/location>/s, '').trim();
         }
 
@@ -322,91 +332,88 @@ const Chat = () => {
                 }
               >
                 <div className="custom-message-content">
-                {message.content.split('|||').map((part, partIndex) => {
-                  if (part.startsWith('TIMESTAMP:')) {
-                      // First, get the content after "TIMESTAMP:"
+                  {message.content && typeof message.content === 'string' && message.content.split('|||').map((part, partIndex) => {
+                    if (safeStartsWith(part, 'TIMESTAMP:')) {
                       const content = part.substring('TIMESTAMP:'.length);
-                      
-                      // Split by : but only for the first occurrence to get seconds
                       const firstSplit = content.indexOf(':');
-                      const seconds = content.substring(0, firstSplit);
-                      
-                      // Get the rest of the content
-                      const remaining = content.substring(firstSplit + 1);
-                      
-                      // Find the last colon to separate filename
+                      const seconds = firstSplit >= 0 ? content.substring(0, firstSplit) : '';
+                      const remaining = firstSplit >= 0 ? content.substring(firstSplit + 1) : '';
                       const lastColonIndex = remaining.lastIndexOf(':');
-                      const displayTime = remaining.substring(0, lastColonIndex);
-                      const filename = remaining.substring(lastColonIndex + 1);
-                      
-                      console.log("Processed values:", { seconds, displayTime, filename });
-                      
-                      const actual_extension = filename?.split('_').pop().split('.')[0];
-                      
-                      if (message.metadata && MEDIA_EXTENSIONS.has(actual_extension)) {
+                      const displayTime = lastColonIndex >= 0 ? remaining.substring(0, lastColonIndex) : '';
+                      const filename = lastColonIndex >= 0 ? remaining.substring(lastColonIndex + 1) : '';
+
+                      if (filename && message.metadata) {
+                        const parts = filename.split('_');
+                        const extParts = parts.length > 0 ? parts[parts.length - 1].split('.') : [];
+                        const actual_extension = extParts.length > 0 ? extParts[0] : '';
+                        
+                        if (actual_extension && MEDIA_EXTENSIONS.has(actual_extension)) {
                           const videoUrl = getFileUrl(filename);
                           
                           if (videoUrl) {
-                              return (
-                                  <VideoPopover
-                                      key={`inline-${partIndex}`}
-                                      videoUrl={videoUrl}
-                                      timestamp={parseInt(seconds)}
-                                      displayTime={displayTime}
-                                  />
-                              );
+                            return (
+                              <VideoPopover
+                                key={`inline-${partIndex}`}
+                                videoUrl={videoUrl}
+                                timestamp={parseInt(seconds) || 0}
+                                displayTime={displayTime}
+                              />
+                            );
                           }
+                        }
                       }
                       return displayTime;
-                  }
-                  return <span key={`text-${partIndex}`}>{part}</span>;
-                })}
-                {message.role === 'assistant' && isSpeechSupported && (
-                  <button 
-                    onClick={() => isSpeaking ? stopSpeaking() : speak(message.content)}
-                    style={{
-                      marginLeft: '8px',
-                      padding: '4px',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {isSpeaking ? '🔇' : '🔊'}
-                  </button>
-                )}
-                {message.metadata && Object.keys(message.metadata).length > 0 && (
-                  <div className="additional-content">
-                    {Object.keys(message.metadata).map((location, metaIndex) => {
-                      if (location) {
-                        const actualExtension = location.split('_').pop().split('.')[0];
-                        const baseFileName = location.substring(0, location.lastIndexOf('_'));
-                        
-                        const url = `https://${getCloudFrontDomain()}.cloudfront.net/${baseFileName}.${actualExtension}`;
-                        
-                        const tryOpenDocument = async () => {
-                          try {
-                            const response = await fetch(url, { method: 'HEAD' });
-                            if (response.ok) {
-                              window.open(url, '_blank');
+                    }
+                    return <span key={`text-${partIndex}`}>{part}</span>;
+                  })}
+                  {message.role === 'assistant' && isSpeechSupported && (
+                    <button 
+                      onClick={() => isSpeaking ? stopSpeaking() : speak(message.content)}
+                      style={{
+                        marginLeft: '8px',
+                        padding: '4px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {isSpeaking ? '🔇' : '🔊'}
+                    </button>
+                  )}
+                  {message.metadata && Object.keys(message.metadata).length > 0 && (
+                    <div className="additional-content">
+                      {Object.keys(message.metadata).map((location, metaIndex) => {
+                        if (location) {
+                          const parts = location.split('_');
+                          const extParts = parts.length > 0 ? parts[parts.length - 1].split('.') : [];
+                          const actualExtension = extParts.length > 0 ? extParts[0] : '';
+                          const baseFileName = location.substring(0, location.lastIndexOf('_'));
+                          
+                          const url = `https://${getCloudFrontDomain()}.cloudfront.net/${baseFileName}.${actualExtension}`;
+                          
+                          const tryOpenDocument = async () => {
+                            try {
+                              const response = await fetch(url, { method: 'HEAD' });
+                              if (response.ok) {
+                                window.open(url, '_blank');
+                              }
+                            } catch (error) {
+                              console.error('Error accessing document:', error);
                             }
-                          } catch (error) {
-                            console.error('Error accessing document:', error);
-                          }
-                        };
-                  
-                        return (
-                          <div key={`content-${metaIndex}`} className="know-more-section">
-                            <Button onClick={tryOpenDocument}>
-                              Know More
-                            </Button>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
-                )}
+                          };
+                    
+                          return (
+                            <div key={`content-${metaIndex}`} className="know-more-section">
+                              <Button onClick={tryOpenDocument}>
+                                Know More
+                              </Button>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  )}
                 </div>
               </ChatBubble>
             )}

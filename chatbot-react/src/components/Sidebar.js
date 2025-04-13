@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Auth } from 'aws-amplify';
 import { BedrockAgentClient, 
         StartIngestionJobCommand, 
-        ListIngestionJobsCommand 
+        GetIngestionJobCommand 
 } from "@aws-sdk/client-bedrock-agent";
 import Select from "@cloudscape-design/components/select";
 import Container from "@cloudscape-design/components/container";
@@ -25,7 +25,8 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
   const [refreshStatus, setRefreshStatus] = useState({
     isLoading: false,
     message: '',
-    error: null
+    error: null,
+    details: null
   });
   const [statusCheck, setStatusCheck] = useState({
     isLoading: false,
@@ -33,6 +34,7 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
     error: null,
     details: null
   });
+  const [currentJobId, setCurrentJobId] = useState(null);
 
   const { guardrailValue, setGuardrailValue, guardrailVersion, setGuardrailVersion } = useGuardrail();
   const { temperature, setTemperature, topP, setTopP, modelId, setModelId } = useInferenceConfig();
@@ -76,7 +78,14 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
     setRefreshStatus({
       isLoading: true,
       message: 'Starting KB refresh...',
-      error: null
+      error: null,
+      details: null
+    });
+    setStatusCheck({
+      isLoading: false,
+      message: '',
+      error: null,
+      details: null
     });
 
     try {
@@ -87,22 +96,22 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
         credentials: Auth.essentialCredentials(credentials)
       });
 
-      // Start ingestion for Documents KB
       const docsCommand = new StartIngestionJobCommand({
         knowledgeBaseId: process.env.REACT_APP_DOCUMENTS_KB_ID,
         dataSourceId: process.env.REACT_APP_DOCUMENTS_DS_ID
       });
 
-      const [docsResponse] = await Promise.all([
-        bedrockClient.send(docsCommand)
-      ]);
+      const docsResponse = await bedrockClient.send(docsCommand);
+      const jobId = docsResponse.ingestionJob?.ingestionJobId;
+
+      setCurrentJobId(jobId);
 
       setRefreshStatus({
         isLoading: false,
         message: 'KB refresh started successfully!',
         error: null,
         details: {
-          documents: docsResponse.ingestionJob.ingestionJobId
+          jobId: jobId
         }
       });
 
@@ -117,6 +126,18 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
   };
 
   const handleStatusCheck = async () => {
+    const jobIdToCheck = currentJobId;
+    
+    if (!jobIdToCheck) {
+      setStatusCheck({
+        isLoading: false,
+        message: '',
+        error: "No job ID found. Please trigger a refresh first.",
+        details: null
+      });
+      return;
+    }
+
     setStatusCheck({
       isLoading: true,
       message: 'Checking refresh status...',
@@ -132,24 +153,20 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
         credentials: Auth.essentialCredentials(credentials)
       });
 
-      // Get status for Documents KB
-      const docsCommand = new ListIngestionJobsCommand({
+      const docsCommand = new GetIngestionJobCommand({
         knowledgeBaseId: process.env.REACT_APP_DOCUMENTS_KB_ID,
         dataSourceId: process.env.REACT_APP_DOCUMENTS_DS_ID,
-        maxResults: 1
+        ingestionJobId: jobIdToCheck
       });
 
-      const [docsJobs] = await Promise.all([
-        bedrockClient.send(docsCommand)
-      ]);
+      const response = await bedrockClient.send(docsCommand);
+      const jobDetails = response.ingestionJob;
 
       setStatusCheck({
         isLoading: false,
         message: 'Status retrieved successfully',
         error: null,
-        details: {
-          documents: docsJobs.ingestionJobSummaries[0] || null
-        }
+        details: jobDetails
       });
 
     } catch (error) {
@@ -209,7 +226,7 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
         </div>
       </div>
     );
-  };  
+  };
 
   const renderContentUploadTab = () => (
     <Container>
@@ -236,7 +253,7 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
                 <p>{refreshStatus.message}</p>
                 {refreshStatus.details && (
                   <div className="job-ids">
-                    <p>Documents Job ID: {refreshStatus.details.documents}</p>
+                    <p>Documents Job ID: {refreshStatus.details.jobId}</p>
                   </div>
                 )}
               </div>
@@ -262,7 +279,7 @@ const Sidebar = ({ isCollapsed, onToggleCollapse }) => {
             {statusCheck.message && !statusCheck.error && statusCheck.details && (
               <div className="status-message success">
                 <h4>Documents KB Status:</h4>
-                {formatJobStatus(statusCheck.details.documents)}
+                {formatJobStatus(statusCheck.details)}
               </div>
             )}
 
