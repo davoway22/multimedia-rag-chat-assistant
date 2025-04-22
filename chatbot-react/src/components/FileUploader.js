@@ -33,11 +33,6 @@ const FileUploader = () => {
     return ALLOWED_FILE_TYPES.includes(ext);
   };
 
-  const isImageFile = (filename) => {
-    const ext = getFileExtension(filename);
-    return IMAGE_EXTENSIONS.includes(ext);
-  };
-
   const sanitizeFileName = (fileName) => {
     if (!fileName || typeof fileName !== 'string') return 'unnamed-file';
     

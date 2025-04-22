@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, Suspense } from 'react';
+import React, { useState, useRef, useEffect, Suspense, useCallback } from 'react';
 import { Auth } from 'aws-amplify';
-import { getCloudFrontDomain } from '../config/amplify-config';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { fromCognitoIdentityPool } from '@aws-sdk/credential-provider-cognito-identity';
 import { CognitoIdentityClient } from '@aws-sdk/client-cognito-identity';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import VideoPopover from './VideoPopover-edge';
 import FormField from "@cloudscape-design/components/form-field";
 import ChatBubble from "@cloudscape-design/chat-components/chat-bubble";
@@ -14,21 +15,18 @@ import { Button } from "@cloudscape-design/components";
 import { useGuardrail, useInferenceConfig } from '../context/AppContext';
 
 // Set of valid media extensions
-const MEDIA_EXTENSIONS = new Set(['mp3', 'mp4', 'wav', 'flac', 'ogg', 'amr', 'webm', 'mov']);
+const MEDIA_EXTENSIONS = new Set(['mp3', 'mp4', 'wav', 'flac', 'ogg', 'amr', 'webm', 'mov', 'pdf']);
 
 // Utility function to convert time
 const convertTime = (stime) => {
   if (!stime) return '';
   
-  // Remove XML tags if present
   const cleanTime = stime.replace(/<\/?timestamp>/g, '');
   
-  // Check if the string contains any numbers
   if (!(/\d/.test(cleanTime))) {
     return cleanTime;
   }
 
-  // If cleanTime is not a number, return as is
   if (isNaN(cleanTime)) {
     return cleanTime;
   }
@@ -38,7 +36,6 @@ const convertTime = (stime) => {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  // If hours > 0, return HH:MM:SS format, otherwise return MM:SS
   if (hours > 0) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }
@@ -61,42 +58,91 @@ const parseMetadata = (metadataLines) => {
 
 const parseTimestamps = (answer, parsedMetadata) => {
   return answer.replace(/\[(\d+)\s+([^\]]+)\]/g, (match, seconds, filename) => {
-    
     if (Object.keys(parsedMetadata).includes(filename)) {
-      const actual_extension = filename.split('_').pop().split('.')[0];
+      console.log('Original filename from metadata:', filename); // Log original filename
       
-      if (MEDIA_EXTENSIONS.has(actual_extension)) {
-        const formattedTime = convertTime(seconds);
-        const result = `|||TIMESTAMP:${seconds}:${formattedTime}:${filename}|||`;
-        return result;
+      // Handle filenames with or without extensions
+      const fileParts = filename.split('.');
+      let actualExtension, baseName;
+      
+      if (fileParts.length > 1) {
+        // File has an extension
+        actualExtension = fileParts.pop();
+        baseName = fileParts.join('.');
       } else {
-        return '';
+        // File has no extension
+        actualExtension = '';
+        baseName = filename;
       }
+      
+      console.log('Parsed filename parts:', { baseName, actualExtension }); // Log parsed parts
+      
+      if (MEDIA_EXTENSIONS.has(actualExtension.toLowerCase())) {
+        const formattedTime = convertTime(seconds);
+        const finalFilename = actualExtension ? `${baseName}.${actualExtension}` : baseName;
+        console.log('Final filename being used:', finalFilename); // Log final filename
+        return `|||TIMESTAMP:${seconds}:${formattedTime}:${finalFilename}|||`;
+      }
+      return '';
     }
     return match;
   });
 };
 
+
 const getFileUrl = async (filename) => {
-  if (filename) {
-    const actual_extension = filename.split('_').pop().split('.')[0];
-    const baseFileName = filename.split('.')[0].replace(`_${actual_extension}`, '');
-    try {
-      const session = await Auth.currentSession();
-      const token = session.getIdToken().getJwtToken();
-      return {
-        url: `https://${getCloudFrontDomain()}.cloudfront.net/${baseFileName}.${actual_extension}?auth=${encodeURIComponent(token)}`,
-        token: token
-      };
-    } catch (error) {
-      console.error('Error getting authentication token:', error);
-      return null;
+  if (!filename) return null;
+
+  // Step 1: Strip .txt
+  let cleanName = filename.endsWith('.txt') ? filename.slice(0, -4) : filename;
+
+  // Step 2: Replace _pdf, _mp4, etc. with .pdf, .mp4, etc.
+  for (const ext of MEDIA_EXTENSIONS) {
+    const suffix = `_${ext.toLowerCase()}`;
+    if (cleanName.toLowerCase().endsWith(suffix)) {
+      cleanName = cleanName.slice(0, -suffix.length) + `.${ext}`;
+      break;
     }
   }
-  return '';
+
+  const key = `Archive/${cleanName}`;
+  console.log('Transformed filename:', filename, '→', key);
+
+  try {
+    const session = await Auth.currentSession();
+    const credentials = fromCognitoIdentityPool({
+      client: new CognitoIdentityClient({ 
+        region: process.env.REACT_APP_AWS_REGION 
+      }),
+      identityPoolId: process.env.REACT_APP_IDENTITY_POOL_ID,
+      logins: {
+        [`cognito-idp.${process.env.REACT_APP_AWS_REGION}.amazonaws.com/${process.env.REACT_APP_USER_POOL_ID}`]: 
+          session.getIdToken().getJwtToken()
+      }
+    });
+
+    const s3Client = new S3Client({ 
+      region: 'us-east-1',
+      credentials: await credentials()
+    });
+
+    const command = new GetObjectCommand({
+      Bucket: '975050290062-organized-bucket-chatbot-dev',   //'975050290062-media-bucket-chatbot-dev',
+      Key: key
+    });
+
+    const url = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+    return { url };
+
+  } catch (error) {
+    console.error('Error generating presigned URL:', error);
+    return null;
+  }
 };
 
-const AsyncVideoPopover = ({ filename, seconds, displayTime, getFileUrl }) => {
+
+
+const AsyncVideoPopover = ({ filename, seconds, displayTime }) => {
   const [videoData, setVideoData] = useState(null);
 
   useEffect(() => {
@@ -122,8 +168,6 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [parsedMetadata, setParsedMetadata] = useState({});
-  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState(false);  
   const messagesEndRef = useRef(null);
@@ -136,81 +180,7 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    if (pendingSubmit && input.trim()) {
-      handleSubmit();
-      setPendingSubmit(false);
-    }
-  }, [pendingSubmit, input]);
-
-  const startListening = () => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-  
-      recognition.onstart = () => {
-        setIsRecording(true);
-      };
-  
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(transcript);
-        setTimeout(() => {
-          setPendingSubmit(true);
-        }, 1500);
-      };
-  
-      recognition.onerror = (event) => {
-        setIsRecording(false);
-      };
-  
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-  
-      try {
-        recognition.start();
-      } catch (error) {
-      }
-    } else {
-      alert('Speech recognition is not supported in this browser.');
-    }
-  };
-
-  const speak = (text) => {
-    // Cancel any ongoing speech
-    window.speechSynthesis.cancel();
-  
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    
-    // Optional: Customize the voice settings
-    utterance.rate = 1.0;  // Speed of speech (0.1 to 10)
-    utterance.pitch = 1.0; // Pitch (0 to 2)
-    utterance.volume = 1.0; // Volume (0 to 1)
-    
-    // Optional: Select a specific voice
-    const voices = window.speechSynthesis.getVoices();
-    const preferredVoice = voices.find(voice => voice.lang === 'en-US');
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-  
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const stopSpeaking = () => {
-    window.speechSynthesis.cancel();
-  };
-  
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!input.trim()) return;
 
     const userMessage = input.trim();
@@ -271,38 +241,31 @@ const Chat = () => {
       if (content.includes('</answer>')) {
         const [answerText, metadataText] = content.split('<answer>')[1].split('</answer>');
 
-        // Check for location tags within answer
-        let processedAnswer = answerText;
         let locationTags = '';
+        const answerWithoutLocations = answerText.includes('<location>') 
+          ? answerText.replace(/<location>.*?<\/location>/s, '').trim()
+          : answerText;
+
         if (answerText.includes('<location>')) {
-          // Extract location information
           const locationMatch = answerText.match(/<location>(.*?)<\/location>/s);
           if (locationMatch) {
-              locationTags = `<location>${locationMatch[1]}</location>`;
-              // Remove location tags from the answer
-              processedAnswer = answerText.replace(/<location>.*?<\/location>/s, '').trim();
+            locationTags = `<location>${locationMatch[1]}</location>`;
           }
         }
-        // Combine metadata with location tags
+
         const combinedMetadata = locationTags ? `${locationTags}\n${metadataText}` : metadataText;
-  
         const metadata = parseMetadata(combinedMetadata.split('\n'));
-        setParsedMetadata(metadata);
-  
-        const parsedAnswer = parseTimestamps(answerText, metadata);
+        const parsedAnswer = parseTimestamps(answerWithoutLocations, metadata);
         
         setMessages(prev => [...prev, { 
           role: 'assistant', 
           content: parsedAnswer,
-          metadata: metadata
+          metadata
         }]);
       } else {
-        // Handle content without answer tags but possibly with location tags
-        let processedContent = content;
-        if (content.includes('<location>')) {
-          // Remove location tags and their content completely
-          processedContent = content.replace(/<location>.*?<\/location>/s, '').trim();
-        }
+        const processedContent = content.includes('<location>') 
+          ? content.replace(/<location>.*?<\/location>/s, '').trim()
+          : content;
 
         setMessages(prev => [...prev, { 
           role: 'assistant', 
@@ -316,6 +279,90 @@ const Chat = () => {
       }]);
     } finally {
       setIsLoading(false);
+    }
+  }, [input, guardrailValue, guardrailVersion, temperature, topP, modelId]);
+
+  useEffect(() => {
+    if (pendingSubmit && input.trim()) {
+      handleSubmit();
+      setPendingSubmit(false);
+    }
+  }, [pendingSubmit, input, handleSubmit]);
+
+  const startListening = () => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+  
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+  
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+        setTimeout(() => {
+          setPendingSubmit(true);
+        }, 1500);
+      };
+  
+      recognition.onerror = (event) => {
+        setIsRecording(false);
+      };
+  
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+  
+      try {
+        recognition.start();
+      } catch (error) {
+      }
+    } else {
+      alert('Speech recognition is not supported in this browser.');
+    }
+  };
+
+  const speak = (text) => {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => voice.lang === 'en-US');
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    window.speechSynthesis.cancel();
+  };
+  
+  const openDocument = async (location) => {
+    try {
+      const fileData = await getFileUrl(location);
+      if (fileData?.url) {
+        window.open(fileData.url, '_blank', 'noopener');
+      } else {
+        throw new Error('Failed to generate document URL');
+      }
+    } catch (error) {
+      console.error('Error opening document:', error);
+      alert('Error opening content: ' + error.message);
     }
   };
 
@@ -360,17 +407,21 @@ const Chat = () => {
                     const displayTime = remaining.substring(0, lastColonIndex);
                     const filename = remaining.substring(lastColonIndex + 1);
                     
-                    const actual_extension = filename?.split('_').pop().split('.')[0];
+                    console.log('Rendering timestamp with filename:', filename); // Log filename being rendered
                     
-                    if (message.metadata && MEDIA_EXTENSIONS.has(actual_extension)) {
+                    const fileParts = filename.split('.');
+                    const actualExtension = fileParts.length > 1 ? fileParts.pop() : '';
+                    const baseName = fileParts.join('.');
+                    const fullFilename = actualExtension ? `${baseName}.${actualExtension}` : baseName;
+                    
+                    if (message.metadata && MEDIA_EXTENSIONS.has(actualExtension.toLowerCase())) {
                       return (
-                        <Suspense fallback={displayTime}>
+                        <Suspense fallback={displayTime} key={`suspense-${partIndex}`}>
                           <AsyncVideoPopover
                             key={`inline-${partIndex}`}
-                            filename={filename}
+                            filename={fullFilename}
                             seconds={parseInt(seconds)}
                             displayTime={displayTime}
-                            getFileUrl={getFileUrl}
                           />
                         </Suspense>
                       );
@@ -397,33 +448,9 @@ const Chat = () => {
                   <div className="additional-content">
                     {Object.keys(message.metadata).map((location, metaIndex) => {
                       if (location) {
-                        const actualExtension = location.split('_').pop().split('.')[0];
-                        const baseFileName = location.substring(0, location.lastIndexOf('_'));
-                        
-                        const tryOpenDocument = async () => {
-                          try {
-                            const session = await Auth.currentSession();
-                            const token = session.getIdToken().getJwtToken();
-
-                            const cloudFrontDomain = getCloudFrontDomain(); 
-                            const actualExtension = location.split('_').pop().split('.')[0];
-                            const baseFileName = location.substring(0, location.lastIndexOf('_'));
-
-                            const url = `https://${cloudFrontDomain}.cloudfront.net/${baseFileName}.${actualExtension}`;
-                            const encodedToken = encodeURIComponent(token);
-                            const urlWithAuth = `${url}?auth=${encodedToken}`;
-                            
-                            // Use only window.open with noopener for security
-                            window.open(urlWithAuth, '_blank', 'noopener');
-                            
-                          } catch (error) {
-                            console.error('Error:', error);
-                            alert('Error opening content: ' + error.message);
-                          }
-                        };
                         return (
                           <div key={`content-${metaIndex}`} className="know-more-section">
-                            <Button onClick={tryOpenDocument}>
+                            <Button onClick={() => openDocument(location)}>
                               Know More
                             </Button>
                           </div>
