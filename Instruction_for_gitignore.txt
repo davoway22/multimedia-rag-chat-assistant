@@ -1,0 +1,51 @@
+1.
+Open PowerShell inside your main project folder:
+
+Press Shift + Right-click in the folder → Click Open PowerShell window here.
+
+2.
+Create .gitignore:
+
+powershell
+Copy
+Edit
+
+Run:
+New-Item .gitignore -ItemType File
+
+Add exclusions to .gitignore:
+
+3.
+powershell
+Copy
+Edit
+
+Run the below: 
+
+Add-Content .gitignore "node_modules/"
+Add-Content .gitignore ".env"
+Add-Content .gitignore "dist/"
+Add-Content .gitignore "build/"
+Add-Content .gitignore "*.log"
+Add-Content .gitignore "coverage/"
+
+
+3.
+Check it's created:
+
+powershell
+Copy
+Edit
+
+Run
+Get-Content .gitignore
+
+4
+Stage and commit changes: If you're using Git from PowerShell:
+bash
+Copy
+Edit
+
+git add .gitignore
+git commit -m "Add .gitignore file to ignore node_modules and env"
+git push
