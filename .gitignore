@@ -1,6 +1,56 @@
+# === Node.js Dependencies ===
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === Environment Variables ===
 .env
-dist/
+.env.*  # e.g., .env.production, .env.local
+
+# === Build Output ===
 build/
-*.log
+dist/
 coverage/
+
+# === Amplify Files ===
+amplify/
+*.awscloudformation/
+team-provider-info.json
+amplify/#current-cloud-backend/
+
+# === OS & Editor Junk ===
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# === Logs ===
+*.log
+
+# === VSCode ===
+.vscode/
+
+# === React Native (if used later) ===
+.expo/
+.expo-shared/
+
+# === Lambda Package Files ===
+*.zip
+lambda-edge/layers/
+lambda-edge/node_modules/
+
+# === GitHub Desktop Backup ===
+*.orig
+
+# === Coverage or test output ===
+coverage/
+jest-html-reporters-*
+
+# === Ignore IDE folders ===
+.idea/
+*.iml
+
+# === Ignore local backups or temp ===
+*.bak
+*.tmp
